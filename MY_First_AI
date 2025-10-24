@@ -1,0 +1,47 @@
+!pip install gspread gspread-dataframe openai
+
+import gspread
+from google.colab import auth
+auth.authenticate_user()
+# If the above line fails, you might need to re-run this cell or check your Google account permissions.
+
+from google.auth import default
+creds, _ = default()
+gc = gspread.authorize(creds)
+
+# Open your AppSheet-connected Google Sheet
+sheet = gc.open("Customer_Feedback_Data").sheet1
+
+# Read into DataFrame
+import pandas as pd
+from gspread_dataframe import get_as_dataframe, set_with_dataframe
+
+df = get_as_dataframe(sheet).dropna(subset=["Customer", "Feedback"])
+df.head()
+------------------------OPENAI-----------------------
+import openai
+import pandas as pd # Import pandas as it's used in the cell
+from google.colab import userdata # Import userdata to access secrets
+
+# Get the API key from Colab secrets
+openai_api_key = userdata.get('OPENAI_API_KEY') # 🔐 Use Colab secrets for your API key
+
+def summarize_feedback(feedback):
+    # Updated syntax for OpenAI chat completions
+    client = openai.OpenAI(api_key=openai_api_key)
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": f"Redefine the following customer feedback in two line (professional tone):\n\n{feedback}"}]
+    )
+    return response.choices[0].message.content.strip()
+
+# Apply AI summary only where it's empty
+df["AI_Summary"] = df.apply(
+    lambda row: summarize_feedback(row["Feedback"]) if pd.isna(row["AI_Summary"]) else row["AI_Summary"],
+    axis=1
+)
+
+df.head()
+---------------------Write Response---------------------------
+set_with_dataframe(sheet, df)
+print("✅ AI Summaries written back to AppSheet data successfully!")
